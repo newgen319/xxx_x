@@ -18,9 +18,28 @@ if ($is32Bit) {
 }
 
 Write-Host "Downloading DLL..." -ForegroundColor Cyan
-$wc = New-Object System.Net.WebClient
-$dllBytes = $wc.DownloadData($dllUrl)
-Write-Host "Downloaded $($dllBytes.Length) bytes" -ForegroundColor Green
+Write-Host "URL: $dllUrl" -ForegroundColor Gray
+
+# ใช้ Invoke-WebRequest แทน WebClient
+try {
+    $response = Invoke-WebRequest -Uri $dllUrl -UseBasicParsing -Headers @{
+        "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "Accept" = "*/*"
+    }
+    $dllBytes = $response.Content
+    Write-Host "Downloaded $($dllBytes.Length) bytes" -ForegroundColor Green
+} catch {
+    Write-Host "Download failed: $_" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit
+}
+
+# ตรวจสอบว่าได้ DLL จริงหรือไม่ (ไฟล์ต้องมีขนาด > 0)
+if ($dllBytes.Length -eq 0) {
+    Write-Host "Downloaded file is empty!" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit
+}
 
 Add-Type -TypeDefinition @"
 using System;
@@ -39,13 +58,25 @@ public class Injector {
 "@
 
 $hProcess = [Injector]::OpenProcess(0x1F0FFF, $false, $targetPid)
-if ($hProcess -eq 0) { Write-Host "OpenProcess failed! Run as Admin" -ForegroundColor Red; Read-Host; exit }
+if ($hProcess -eq 0) { 
+    Write-Host "OpenProcess failed! Run as Administrator" -ForegroundColor Red
+    Read-Host "Press Enter to exit"
+    exit 
+}
+Write-Host "Process opened successfully" -ForegroundColor Green
 
 $remoteBuffer = [Injector]::VirtualAllocEx($hProcess, 0, $dllBytes.Length, 0x3000, 0x04)
-if ($remoteBuffer -eq 0) { Write-Host "VirtualAllocEx failed" -ForegroundColor Red; [Injector]::CloseHandle($hProcess); Read-Host; exit }
+if ($remoteBuffer -eq 0) { 
+    Write-Host "VirtualAllocEx failed" -ForegroundColor Red
+    [Injector]::CloseHandle($hProcess)
+    Read-Host "Press Enter to exit"
+    exit 
+}
+Write-Host "Memory allocated at: 0x$($remoteBuffer.ToString('X'))" -ForegroundColor Green
 
 $bytesWritten = [UIntPtr]::Zero
 [Injector]::WriteProcessMemory($hProcess, $remoteBuffer, $dllBytes, $dllBytes.Length, [ref] $bytesWritten)
+Write-Host "DLL written to process memory" -ForegroundColor Green
 
 $kernel32 = [Injector]::GetProcAddress([Injector]::LoadLibrary("kernel32.dll"), "LoadLibraryA")
 $threadHandle = [Injector]::CreateRemoteThread($hProcess, 0, 0, $kernel32, $remoteBuffer, 0, 0)
@@ -53,13 +84,14 @@ $threadHandle = [Injector]::CreateRemoteThread($hProcess, 0, 0, $kernel32, $remo
 if ($threadHandle -eq 0) {
     Write-Host "CreateRemoteThread failed" -ForegroundColor Red
 } else {
+    Write-Host "Remote thread created, waiting for LoadLibrary..." -ForegroundColor Green
     [Injector]::WaitForSingleObject($threadHandle, 5000)
     $exitCode = 0
     [Injector]::GetExitCodeThread($threadHandle, [ref]$exitCode)
     if ($exitCode -eq 0) {
         Write-Host "LoadLibrary FAILED! Architecture mismatch or DLL issue" -ForegroundColor Red
     } else {
-        Write-Host "LoadLibrary SUCCESS! DLL injected" -ForegroundColor Green
+        Write-Host "LoadLibrary SUCCESS! DLL injected at: 0x$($exitCode.ToString('X'))" -ForegroundColor Green
     }
     [Injector]::CloseHandle($threadHandle)
 }

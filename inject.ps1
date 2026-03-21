@@ -8,7 +8,7 @@ $targetPid = [int](Read-Host)
 $processExists = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
 if (-not $processExists) { exit }
 
-# ตรวจสอบว่า Injector type มีอยู่แล้วหรือยัง
+# ตรวจสอบ Type ซ้ำ
 if (-not ([System.Management.Automation.PSTypeName]'Injector').Type) {
     Add-Type -TypeDefinition @"
 using System;

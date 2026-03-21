@@ -20,20 +20,9 @@ try {
 $is64BitProcess = [Environment]::Is64BitOperatingSystem
 Write-Host "[2] OS is 64-bit: $is64BitProcess" -ForegroundColor Gray
 
-# ลองวิธีตรวจสอบ architecture ที่แม่นยำขึ้น
-$isWow64 = $false
-try {
-    $handle = [Injector]::OpenProcess(0x0400, $false, $targetPid) # PROCESS_QUERY_INFORMATION
-    if ($handle -ne 0) {
-        [Injector]::IsWow64Process($handle, [ref]$isWow64)
-        [Injector]::CloseHandle($handle)
-    }
-} catch {
-    # ถ้ายังไม่มี IsWow64Process จะใช้วิธีอื่น
-    $isWow64 = $proc.Modules | Where-Object { $_.ModuleName -eq "wow64.dll" } | ForEach-Object { $true }
-}
-
-if ($isWow64) {
+# ตรวจสอบว่า process เป็น 32-bit หรือ 64-bit
+$is32BitProcess = $proc.Modules | Where-Object { $_.ModuleName -eq "wow64.dll" } | ForEach-Object { $true }
+if ($is32BitProcess) {
     Write-Host "[3] Target process is 32-bit (x86)" -ForegroundColor Yellow
     $dllUrl = $dllUrl_x86
     $arch = "x86"
@@ -57,7 +46,7 @@ try {
     exit
 }
 
-# เพิ่ม Win32 API (รวม IsWow64Process)
+# เพิ่ม Win32 API
 if (-not ([System.Management.Automation.PSTypeName]'Injector').Type) {
     Write-Host "[5] Adding Win32 API..." -ForegroundColor Cyan
     Add-Type -TypeDefinition @"
@@ -91,12 +80,6 @@ public class Injector {
     
     [DllImport("kernel32.dll", SetLastError=true)]
     public static extern bool GetExitCodeThread(IntPtr hThread, out uint lpExitCode);
-    
-    [DllImport("kernel32.dll", SetLastError=true)]
-    public static extern bool IsWow64Process(IntPtr hProcess, out bool Wow64Process);
-    
-    [DllImport("kernel32.dll", SetLastError=true)]
-    public static extern int GetLastError();
 }
 "@
     Write-Host "    API added successfully" -ForegroundColor Green

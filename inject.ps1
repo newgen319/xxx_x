@@ -8,7 +8,6 @@ $targetPid = [int](Read-Host)
 $processExists = Get-Process -Id $targetPid -ErrorAction SilentlyContinue
 if (-not $processExists) { exit }
 
-# ตรวจสอบ Type ซ้ำ
 if (-not ([System.Management.Automation.PSTypeName]'Injector').Type) {
     Add-Type -TypeDefinition @"
 using System;
@@ -29,15 +28,19 @@ public class Injector {
     public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
     [DllImport("kernel32.dll", SetLastError=true)]
     public static extern IntPtr LoadLibrary(string lpFileName);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern bool GetExitCodeThread(IntPtr hThread, out uint lpExitCode);
 }
 "@
 }
 
 $hProcess = [Injector]::OpenProcess(0x1F0FFF, $false, $targetPid)
-if ($hProcess -eq 0) { exit }
+if ($hProcess -eq 0) { "OpenProcess failed"; exit }
 
 $remoteBuffer = [Injector]::VirtualAllocEx($hProcess, 0, $dllBytes.Length, 0x3000, 0x04)
-if ($remoteBuffer -eq 0) { [Injector]::CloseHandle($hProcess); exit }
+if ($remoteBuffer -eq 0) { "VirtualAllocEx failed"; [Injector]::CloseHandle($hProcess); exit }
 
 $bytesWritten = [UIntPtr]::Zero
 [Injector]::WriteProcessMemory($hProcess, $remoteBuffer, $dllBytes, $dllBytes.Length, [ref] $bytesWritten)
@@ -45,7 +48,22 @@ $bytesWritten = [UIntPtr]::Zero
 $kernel32 = [Injector]::GetProcAddress([Injector]::LoadLibrary("kernel32.dll"), "LoadLibraryA")
 $threadHandle = [Injector]::CreateRemoteThread($hProcess, 0, 0, $kernel32, $remoteBuffer, 0, 0)
 
-if ($threadHandle -ne 0) { 
-    [Injector]::CloseHandle($threadHandle) 
+if ($threadHandle -eq 0) {
+    "CreateRemoteThread failed"
+} else {
+    # รอ LoadLibrary ทำงานเสร็จ (รอ 5 วินาที)
+    $waitResult = [Injector]::WaitForSingleObject($threadHandle, 5000)
+    
+    # ตรวจสอบ exit code ของ thread (คือ address ของ DLL ที่โหลด ถ้า 0 แสดงว่าโหลดไม่สำเร็จ)
+    $exitCode = 0
+    [Injector]::GetExitCodeThread($threadHandle, [ref]$exitCode)
+    
+    if ($exitCode -eq 0) {
+        "LoadLibrary FAILED - DLL may be invalid or wrong architecture"
+    } else {
+        "LoadLibrary SUCCESS - DLL loaded at: 0x$($exitCode.ToString('X'))"
+    }
+    
+    [Injector]::CloseHandle($threadHandle)
 }
 [Injector]::CloseHandle($hProcess)

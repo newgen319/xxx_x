@@ -27,20 +27,36 @@ public class Injector {
     public static extern IntPtr GetProcAddress(IntPtr hModule, string lpProcName);
     [DllImport("kernel32.dll", SetLastError=true)]
     public static extern IntPtr LoadLibrary(string lpFileName);
+    [DllImport("kernel32.dll", SetLastError=true)]
+    public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
 }
 "@
 
 $hProcess = [Injector]::OpenProcess(0x1F0FFF, $false, $targetPid)
 if ($hProcess -eq 0) { exit }
 
+# จอง memory และเขียน DLL
 $remoteBuffer = [Injector]::VirtualAllocEx($hProcess, 0, $dllBytes.Length, 0x3000, 0x04)
 if ($remoteBuffer -eq 0) { [Injector]::CloseHandle($hProcess); exit }
 
 $bytesWritten = [UIntPtr]::Zero
 [Injector]::WriteProcessMemory($hProcess, $remoteBuffer, $dllBytes, $dllBytes.Length, [ref] $bytesWritten)
 
+# โหลด DLL ด้วย LoadLibrary
 $kernel32 = [Injector]::GetProcAddress([Injector]::LoadLibrary("kernel32.dll"), "LoadLibraryA")
 $threadHandle = [Injector]::CreateRemoteThread($hProcess, 0, 0, $kernel32, $remoteBuffer, 0, 0)
 
-if ($threadHandle -ne 0) { [Injector]::CloseHandle($threadHandle) }
+if ($threadHandle -eq 0) { 
+    [Injector]::CloseHandle($hProcess)
+    exit 
+}
+
+# รอให้ DLL โหลดเสร็จ
+[Injector]::WaitForSingleObject($threadHandle, 5000)
+[Injector]::CloseHandle($threadHandle)
+
+# --- ถ้า DLL มี Export Function ให้เรียกต่อ ---
+# หา base address ของ DLL ใน target process (ต้องใช้เทคนิคเพิ่มเติม)
+# หรือใช้ CreateRemoteThread เรียก function เฉพาะ
+
 [Injector]::CloseHandle($hProcess)

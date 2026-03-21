@@ -51,19 +51,14 @@ $threadHandle = [Injector]::CreateRemoteThread($hProcess, 0, 0, $kernel32, $remo
 if ($threadHandle -eq 0) {
     "CreateRemoteThread failed"
 } else {
-    # รอ LoadLibrary ทำงานเสร็จ (รอ 5 วินาที)
     $waitResult = [Injector]::WaitForSingleObject($threadHandle, 5000)
-    
-    # ตรวจสอบ exit code ของ thread (คือ address ของ DLL ที่โหลด ถ้า 0 แสดงว่าโหลดไม่สำเร็จ)
     $exitCode = 0
     [Injector]::GetExitCodeThread($threadHandle, [ref]$exitCode)
-    
     if ($exitCode -eq 0) {
         "LoadLibrary FAILED - DLL may be invalid or wrong architecture"
     } else {
         "LoadLibrary SUCCESS - DLL loaded at: 0x$($exitCode.ToString('X'))"
     }
-    
     [Injector]::CloseHandle($threadHandle)
 }
 [Injector]::CloseHandle($hProcess)

